@@ -2,6 +2,7 @@ from __future__ import division
 __author__ = 'Horea Christian'
 import rpy2.robjects as robjects
 from rpy2.robjects.packages import importr
+import pandas.rpy.common as com
 import numpy as np
 base = importr('base')
 stats = importr('stats')
@@ -118,10 +119,11 @@ def av(model='',formula='', data='', output='', as_strings='', title='Title for 
 	raise ValueError('Please specify a "formula" argument.')	
 
     formula = robjects.Formula(formula)
+    dfr = com.convert_to_r_dataframe(data)  # convert from pandas to R and make string columns factors
 	
     if model == 'aov':
 	output = 'xtable' #aov only works with texreg
-	av_model = stats.aov(formula, data=data)
+	av_model = stats.aov(formula, data=dfr)
 	av_model_sum = base.summary(av_model)
     
     if output == 'xtable':
