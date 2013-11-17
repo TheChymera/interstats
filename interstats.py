@@ -8,7 +8,7 @@ base = importr('base')
 stats = importr('stats')
 from os import remove
 
-def lm(model='',fixed='', random='', data='', output='', as_strings='', title='Title for Your Output', label='Label for Your Output', pythontex=True):
+def lm(fixed, random, model='', data='', output='', as_strings='', title='Title for Your Output', label='Label for Your Output', pythontex=True):
     if not output:
 	output = 'texreg'
     if not model:
@@ -23,9 +23,6 @@ def lm(model='',fixed='', random='', data='', output='', as_strings='', title='T
 	stargazer = importr('stargazer')
     elif output == 'texreg':
 	texreg = importr('texreg')
-		
-    if not fixed or not random:
-	raise ValueError('Please specify both a "fixed" and a  "random" argument.')
     
     if model == 'lme4':
 	formula = fixed + ' + (1|' + random + ')'
@@ -114,7 +111,7 @@ def anova_of_lm(model='',formulae='', data='', output='', as_strings='', title='
     else:
 	return '\n'.join(np.array(latex))
 	
-def av(model='', data='', formula='', output='', as_strings='', title='Title for Your Output', label='Label for Your Output', pythontex=True):
+def av(data, formula, model='', output='', as_strings='', title='Title for Your Output', label='Label for Your Output', pythontex=True):
     if not output:
 	output = 'xtable'
     if not model:
@@ -124,15 +121,12 @@ def av(model='', data='', formula='', output='', as_strings='', title='Title for
 	stargazer = importr('stargazer')
     elif output == 'texreg':
 	texreg = importr('texreg')
-	
-    if not formula:
-	raise ValueError('Please specify a "formula" argument.')	
 
     formula = robjects.Formula(formula)
     dfr = com.convert_to_r_dataframe(data)  # convert from pandas to R and make string columns factors
 	
     if model == 'aov':
-	output = 'xtable' #aov only works with texreg
+	output = 'xtable' #aov only works with xtable
 	av_model = stats.aov(formula, data=dfr)
 	av_model_sum = base.summary(av_model)
     
@@ -156,3 +150,38 @@ def tex_nr(raw_number):
 	latex_expression = '$'+multiplier+'$'
     return latex_expression
     
+def p_table(data, interest, reference, intcap='Conditions of interest', refcap='', caption='', label='', width=0.9, mode='rel',means_only=True): #make table with t-test p-values
+    if mode == 'rel':
+	from scipy.stats import ttest_rel as ttest
+    if mode == 'ind':
+	from scipy.stats import ttest_ind as ttest
+	
+    len_compare = len(reference)-1
+    len_interest = len(interest)-1
+    table_form = '{r|'+'Y|'*len_compare+'}'
+    first_line = intcap+'& \\multicolumn{'+str(len_compare)+'}{c}{'+refcap+'}\\\\\n'
+    second_line = '&'+'&'.join([str(i) for i in reference[1:]])+'\\\\\n'+'\\cline{2-'+str(len(reference))+'}\n'
+    
+    end_tabular = '\\end{tabularx}\n'
+    caption = '\\caption{'+caption+'}\n'
+    label = '\\label{'+label+'}\n'
+    footer = '\\end{center}\n \\end{table}'
+    
+    latex = '\\begin{table}\n \\begin{center}\n \\begin{tabularx}{'+str(width)+'\\textwidth}'+table_form
+    latex += first_line
+    latex += second_line
+    
+    for i in interest[1:]:
+	line = i
+	for r in reference[1:]:
+	    cell = '&'+tex_nr(ttest(data[(data[interest[0]]==i)].groupby('ID')['RT'].mean(),data[(data[reference[0]]==r)].groupby('ID')['RT'].mean())[1])
+	    line += cell
+	line += '\\\\\n'
+	latex += line
+	    
+    
+    latex += end_tabular
+    latex += caption
+    latex += footer
+    
+    return latex       
