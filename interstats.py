@@ -6,10 +6,11 @@ import pandas.rpy.common as com
 import numpy as np
 base = importr('base')
 stats = importr('stats')
+from os import remove
 
-def lm(model='',formula='', data='', output='', as_strings='', title='Title for Your Output', label='Label for Your Output', pythontex=True):
+def lm(model='',fixed='', random='', data='', output='', as_strings='', title='Title for Your Output', label='Label for Your Output', pythontex=True):
     if not output:
-	output = 'stargazer'
+	output = 'texreg'
     if not model:
 	model = 'lme4'
     
@@ -23,36 +24,43 @@ def lm(model='',formula='', data='', output='', as_strings='', title='Title for 
     elif output == 'texreg':
 	texreg = importr('texreg')
 		
-    if not formula:
-	raise ValueError('Please specify a "formula" argument.')
+    if not fixed or not random:
+	raise ValueError('Please specify both a "fixed" and a  "random" argument.')
     
-    formula = robjects.Formula(formula) #format formula string for R
-    
-    #~ the following is "nlme"-relevant. not implemented yet
-    #~ robjects.Formula(formula + ' + (1|ID)')
-    #~ randoms = [
-        #~ '~1|ID'
-        #~ ]
-    #~ for idx, random in enumerate(randoms):
-        #~ randoms[idx] = robjects.Formula(random)  #  make a formula    obect
-
-
+    if model == 'lme4':
+	formula = fixed + ' + (1|' + random + ')'
+	formula = robjects.Formula(formula) #format formula string for R
+    elif model == 'nlme':
+	fixed = robjects.Formula(fixed)
+	random = '~1|' + random
+	random = robjects.Formula(random)
+	
+    data.ix[(data['COI'] != False), 'COI'] = ':'+data.ix[(data['COI'] != False), 'COI'] # add colons here so that the output doesn't directly concatanate teh factor with the name
     for colID in as_strings:
 	data[colID] = data[colID].astype('S8')
-    dfr = com.convert_to_r_dataframe(data, True)  # convert from pandas to R and make string columns factors
+    #~ dfr = com.convert_to_r_dataframe(data, True)  # convert from pandas to R and make string columns factors this (the proper way of coding the line below) seems to have some issues :-/
+    dfr = com.convert_to_r_dataframe(data)  # convert from pandas to R and make string columns factors
     
 
     if model == 'nlme':
-	lin_model = nlme.lme(fixed=formula, data=dfr, random=randoms[0], method='ML')
+	lin_model = nlme.lme(fixed=fixed, data=dfr, random=random, method='ML')
     elif model == 'lme4':
 	lin_model = lme4.lmer(formula=formula, data=dfr, REML='false')
     
     if output == 'stargazer':
-	latex = np.array(stargazer.stargazer(lin_model, summary=False, title='lalala', label='fig:sc_aa'))
-    if pythontex:
-	return ''
-    else:
-	return '\n'.join(np.array(latex))
+	latex = np.array(stargazer.stargazer(lin_model, title=title, label=label))
+    elif output == 'texreg':
+	import os
+	import sys
+	f = open(os.devnull, 'w')
+	sys.stdout = f
+	texreg.texreg(lin_model, caption=title, label=label, single_row=True, file='lm-temp.tex', **{'include.loglik': False, 'include.deviance':False, 'include.aic':False, 'include.bic':False})
+	sys.stdout = sys.__stdout__
+	latex = open('lm-temp.tex').read()
+	remove('lm-temp.tex')
+	
+    return latex
+	#~ return '\n'.join(np.array(latex))
 
 def anova_of_lm(model='',formulae='', data='', output='', as_strings='', title='Title for Your Output', label='Label for Your Output'):
     
@@ -87,7 +95,9 @@ def anova_of_lm(model='',formulae='', data='', output='', as_strings='', title='
 
     for colID in as_strings:
 	data[colID] = data[colID].astype('S8')
-    dfr = com.convert_to_r_dataframe(mydata, True)  # convert from pandas to R and make string columns factors
+    #~ dfr = com.convert_to_r_dataframe(data, True)  # convert from pandas to R and make string columns factors this (the proper way of coding the line below) seems to have some issues :-/
+    dfr = com.convert_to_r_dataframe(data)  # convert from pandas to R and make string columns factors
+
     
     lin_models=[]
     for formula in formulae:
@@ -98,13 +108,13 @@ def anova_of_lm(model='',formulae='', data='', output='', as_strings='', title='
 	lin_models.append(lin_model)
     
     if output == 'stargazer':
-	latex = np.array(stargazer.stargazer(lin_model, summary=False, title='lalala', label='fig:sc_aa'))
+	latex = np.array(stargazer.stargazer(lin_model, title=title, label=label))
     if pythontex:
 	return ''
     else:
 	return '\n'.join(np.array(latex))
 	
-def av(model='',formula='', data='', output='', as_strings='', title='Title for Your Output', label='Label for Your Output', pythontex=True):
+def av(model='', data='', formula='', output='', as_strings='', title='Title for Your Output', label='Label for Your Output', pythontex=True):
     if not output:
 	output = 'xtable'
     if not model:
@@ -127,9 +137,10 @@ def av(model='',formula='', data='', output='', as_strings='', title='Title for 
 	av_model_sum = base.summary(av_model)
     
     if output == 'xtable':
-	xtable.xtable(model_sum, caption=title, label=label)
+	xtable = importr('xtable')
+	latex = xtable.xtable(av_model_sum, caption=title, label=label)
     if pythontex:
-	return ''
+	return latex
     else:
 	return '\n'.join(np.array(latex))
 	
