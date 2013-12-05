@@ -7,14 +7,15 @@ import numpy as np
 base = importr('base')
 stats = importr('stats')
 from os import remove
+from chr_helpers import flatten_list
 
-def lm(fixed, random, model='', data='', output='', as_strings='', title='Title for Your Output', label='Label for Your Output', pythontex=True):
+def lm(data, fixed, random, model='', output='', as_strings='', title='Title for Your Output', label='Label for Your Output', pythontex=True):
     if not output:
 	output = 'texreg'
     if not model:
 	model = 'lme4'
     
-    if model == 'nlme': #this doesn't really work yet
+    if model == 'nlme':
 	nlme = importr('nlme')
     elif model == 'lme4':
 	lme4 = importr('lme4')
@@ -24,23 +25,36 @@ def lm(fixed, random, model='', data='', output='', as_strings='', title='Title 
     elif output == 'texreg':
 	texreg = importr('texreg')
     
+    IVs = fixed.split('~')[1]
+    if "*" in IVs:
+	IVs = [IVs.split("*")]
+    if "+" in IVs:
+	IVs = [IVs.split('+')]
+    if len([i for i in IVs][0]) > 1:
+	IVs = list(flatten_list(IVs))
+    else:
+	IVs = [IVs]
+    
+    for IV in IVs:
+	data[IV] = ':' + data[IV].astype(str) # add colons here so that the output doesn't directly concatanate tthe factor with the name	
+
     if model == 'lme4':
 	formula = fixed + ' + (1|' + random + ')'
 	formula = robjects.Formula(formula) #format formula string for R
     elif model == 'nlme':
 	fixed = robjects.Formula(fixed)
-	random = '~1|' + random
-	random = robjects.Formula(random)
-	
-    data.ix[(data['COI'] != False), 'COI'] = ':'+data.ix[(data['COI'] != False), 'COI'] # add colons here so that the output doesn't directly concatanate teh factor with the name
+	random_formula = ""
+	for i in random:
+	    random_formula += '~1|' + i + " "
+	random = robjects.Formula(random_formula)
+    
     for colID in as_strings:
 	data[colID] = data[colID].astype('S8')
     #~ dfr = com.convert_to_r_dataframe(data, True)  # convert from pandas to R and make string columns factors this (the proper way of coding the line below) seems to have some issues :-/
     dfr = com.convert_to_r_dataframe(data)  # convert from pandas to R and make string columns factors
     
-
     if model == 'nlme':
-	lin_model = nlme.lme(fixed=fixed, data=dfr, random=random, method='ML')
+	lin_model = nlme.lme(fixed, random, data=dfr, method='ML')
     elif model == 'lme4':
 	lin_model = lme4.lmer(formula=formula, data=dfr, REML='false')
     
@@ -51,13 +65,18 @@ def lm(fixed, random, model='', data='', output='', as_strings='', title='Title 
 	import sys
 	f = open(os.devnull, 'w')
 	sys.stdout = f
-	texreg.texreg(lin_model, caption=title, label=label, single_row=True, file='lm-temp.tex', **{'include.loglik': False, 'include.deviance':False, 'include.aic':False, 'include.bic':False})
+	
+	if model == 'lme4':
+	    texreg.texreg(lin_model, caption=title, label=label, single_row=True, file='lm-temp.tex', **{'include.loglik': False, 'include.aic':False, 'include.bic':False, 'include.deviance':False})
+	elif model == 'nlme':
+	    texreg.texreg(lin_model, caption=title, label=label, single_row=True, file='lm-temp.tex', **{'include.loglik': False, 'include.aic':False, 'include.bic':False})
+	
 	sys.stdout = sys.__stdout__
 	latex = open('lm-temp.tex').read()
 	remove('lm-temp.tex')
-	
+    
+    #~ print latex
     return latex
-	#~ return '\n'.join(np.array(latex))
 
 def anova_of_lm(model='',formulae='', data='', output='', as_strings='', title='Title for Your Output', label='Label for Your Output'):
     
@@ -143,18 +162,20 @@ def tex_nr(raw_number):
     raw_number = float(raw_number)
     number = "{:.1e}".format(raw_number)
     multiplier, exponent = number.split('e')
+    if multiplier == "0.0":
+	multiplier = int(float(multiplier))
     exponent = int(exponent)
     if exponent:
-	latex_expression = '$'+multiplier+'\\times 10^{'+str(exponent)+'}$'
+	latex_expression = '$'+str(multiplier)+'\\times 10^{'+str(exponent)+'}$'
     else:
-	latex_expression = '$'+multiplier+'$'
+	latex_expression = '$'+str(multiplier)+'$'
     return latex_expression
     
 def p_table(data, interest, reference, intcap='Conditions of interest', refcap='', caption='', label='', width=0.9, mode='rel',means_only=True): #make table with t-test p-values
     if mode == 'rel':
 	from scipy.stats import ttest_rel as ttest
-    if mode == 'ind':
-	from scipy.stats import ttest_ind as ttest
+    #~ if mode == 'ind':
+	#~ from scipy.stats import ttest_ind as ttest
 	
     len_compare = len(reference)-1
     len_interest = len(interest)-1
@@ -167,7 +188,7 @@ def p_table(data, interest, reference, intcap='Conditions of interest', refcap='
     label = '\\label{'+label+'}\n'
     footer = '\\end{center}\n \\end{table}'
     
-    latex = '\\begin{table}\n \\begin{center}\n \\begin{tabularx}{'+str(width)+'\\textwidth}'+table_form
+    latex = '\\begin{table}[!htbp]\n \\begin{center}\n \\begin{tabularx}{'+str(width)+'\\textwidth}'+table_form
     latex += first_line
     latex += second_line
     
@@ -182,6 +203,46 @@ def p_table(data, interest, reference, intcap='Conditions of interest', refcap='
     
     latex += end_tabular
     latex += caption
+    latex += label
     latex += footer
     
-    return latex       
+    return latex
+    
+def tex_mr(data, intcap='Conditions of interest', refcap='', caption='', label='', width=0.95, document_fontsize="large"): #make table with t-test p-values
+	
+    super_fields = "Peak-Level"
+    fields = ["","Cluster[px]", "\\large{p}\\footnotesize$\\mathsf{_{FWE-corr}}$", "\\large{q}\\footnotesize$\\mathsf{_{FDR-corr}}$", "$\\mathsf{T}$", "$\\mathsf{X [mm]}$", "$\\mathsf{Y [mm]}$", "$\\mathsf{Z [mm]}$"]
+    table_form = '{'+"r"+'Y'*(len(fields[:-3])-1)+"|"+'Y'*len(fields[-3:])+'}'
+    first_line = ' & \\multicolumn{'+str(len(fields)-1)+'}{c}{'+super_fields+'}\\\\\n'+'\\cline{3-'+str(len(fields))+'}\n'
+    second_line = '&'.join([str(field) for field in fields])+'\\\\\n'
+    
+    end_tabular = '\\end{tabularx}\n'
+    caption = '\\caption{'+caption+'}\n'
+    label = '\\label{'+label+'}\n'
+    footer = '\\end{center}\n \\end{table}\\'+document_fontsize
+    
+    latex = '\\begin{table}[!htbp]\n\\footnotesize \\begin{center}\n \\begin{tabularx}{'+str(width)+'\\textwidth}'+table_form
+    latex += first_line
+    latex += second_line
+    
+    for row in data:
+	line = ""
+	if row[0] != "n":
+	    latex += '\\hline\n'
+	for value in row:
+	    if value == "n":
+		line += "&"
+	    else:
+		line += "&"+str(value)
+	line += "\\\\\n"
+	latex += line[1:]
+    
+    latex += end_tabular
+    latex += caption
+    latex += label
+    latex += footer
+    return latex  
+
+#~ #THIS IS FOR TEST PURPOSES
+if __name__ == '__main__':
+    tex_mr([["A",19, 0.993, 0.842, 5.29, -24, -79, -8]])
