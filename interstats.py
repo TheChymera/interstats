@@ -211,8 +211,8 @@ def p_table(data, interest, reference, intcap='Conditions of interest', refcap='
 def tex_mr(data, intcap='Conditions of interest', refcap='', caption='', label='', width=0.95, document_fontsize="large"): #make table with t-test p-values
 	
     super_fields = "Peak-Level"
-    fields = ["","Cluster[px]", "\\large{p}\\footnotesize$\\mathsf{_{FWE-corr}}$", "\\large{q}\\footnotesize$\\mathsf{_{FDR-corr}}$", "$\\mathsf{T}$", "$\\mathsf{X [mm]}$", "$\\mathsf{Y [mm]}$", "$\\mathsf{Z [mm]}$"]
-    table_form = '{'+"r"+'Y'*(len(fields[:-3])-1)+"|"+'Y'*len(fields[-3:])+'}'
+    fields = ["","Cluster[px]", "\\large{p}\\footnotesize$\\mathsf{_{FWE-corr}}$", "\\large{p}\\footnotesize$\\mathsf{_{FDR-corr}}$", "$\\mathsf{T}$", "$\\mathsf{X [mm]}$", "$\\mathsf{Y [mm]}$", "$\\mathsf{Z [mm]}$"]
+    table_form = '{'+"r"+'Y'*(len(fields[:-3])-1)+'Y'*len(fields[-3:])+'}'
     first_line = ' & \\multicolumn{'+str(len(fields)-1)+'}{c}{'+super_fields+'}\\\\\n'+'\\cline{3-'+str(len(fields))+'}\n'
     second_line = '&'.join([str(field) for field in fields])+'\\\\\n'
     
@@ -237,6 +237,7 @@ def tex_mr(data, intcap='Conditions of interest', refcap='', caption='', label='
 	line += "\\\\\n"
 	latex += line[1:]
     
+    latex += "\\hline\n"
     latex += end_tabular
     latex += caption
     latex += label
