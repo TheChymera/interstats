@@ -244,6 +244,3 @@ def tex_mr(data, intcap='Conditions of interest', refcap='', caption='', label='
     latex += footer
     return latex  
 
-#~ #THIS IS FOR TEST PURPOSES
-if __name__ == '__main__':
-    tex_mr([["A",19, 0.993, 0.842, 5.29, -24, -79, -8]])
